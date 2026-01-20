@@ -17,7 +17,6 @@ WORKDIR /app
 # 构建参数
 ARG REPO_OWNER="router-for-me"
 ARG REPO_NAME="CLIProxyAPI"
-ARG GITHUB_TOKEN
 
 # 下载并安装 CLIProxyAPI
 RUN echo "Detecting architecture..." && \
@@ -27,21 +26,20 @@ RUN echo "Detecting architecture..." && \
         arm64|aarch64) OS_ARCH="linux_arm64" ;; \
         *) echo "Unsupported architecture: $ARCH"; exit 1 ;; \
     esac && \
-    echo "Fetching latest release for $OS_ARCH..." && \
-    API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest" && \
-    if [ -n "$GITHUB_TOKEN" ]; then \
-        AUTH_HEADER="Authorization: token $GITHUB_TOKEN"; \
-    else \
-        AUTH_HEADER="User-Agent: Docker-Build"; \
-    fi && \
-    RELEASE_INFO=$(curl -s -H "$AUTH_HEADER" "$API_URL") && \
-    # 尝试提取下载链接
-    DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep -o "\"browser_download_url\": *\"[^\"]*CLIProxyAPI_[^\"]*_${OS_ARCH}.tar.gz\"" | head -n 1 | cut -d'"' -f4) && \
-    if [ -z "$DOWNLOAD_URL" ]; then \
-        echo "Error: Failed to find download URL for $OS_ARCH"; \
-        echo "API Response snippet: $(echo "$RELEASE_INFO" | head -c 200)..."; \
+    echo "Fetching latest version tag..." && \
+    # 使用 GitHub 网页重定向获取最新版本号，避开 API 速率限制
+    LATEST_URL=$(curl -Ls -o /dev/null -w %{url_effective} "https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest") && \
+    VERSION=$(echo "$LATEST_URL" | grep -o "v[0-9]*\.[0-9]*\.[0-9]*" | head -n 1) && \
+    if [ -z "$VERSION" ]; then \
+        echo "Error: Failed to extract version from URL: $LATEST_URL"; \
         exit 1; \
     fi && \
+    echo "Detected latest version: $VERSION" && \
+    # 构造下载链接 (GitHub Releases 标准格式)
+    # 格式: https://github.com/router-for-me/CLIProxyAPI/releases/download/v6.7.15/CLIProxyAPI_6.7.15_linux_amd64.tar.gz
+    # 注意：文件名中的版本号通常不带 'v' 前缀
+    CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//') && \
+    DOWNLOAD_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}/CLIProxyAPI_${CLEAN_VERSION}_${OS_ARCH}.tar.gz" && \
     echo "Downloading from $DOWNLOAD_URL..." && \
     curl -L -o cliproxy.tar.gz "$DOWNLOAD_URL" && \
     # 解压
