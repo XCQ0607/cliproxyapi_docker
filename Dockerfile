@@ -48,16 +48,17 @@ RUN echo "Detecting architecture..." && \
     DOWNLOAD_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}/CLIProxyAPI_${CLEAN_VERSION}_${OS_ARCH}.tar.gz" && \
     echo "Downloading from $DOWNLOAD_URL..." && \
     curl -L -o cliproxy.tar.gz "$DOWNLOAD_URL" && \
-    # 解压
-    tar -xzf cliproxy.tar.gz && \
+    # 解压到临时目录
+    mkdir -p /tmp/cliproxy && \
+    tar -xzf cliproxy.tar.gz -C /tmp/cliproxy && \
     rm cliproxy.tar.gz && \
-    # 整理文件结构
-    BINARY_PATH=$(find . -name "cli-proxy-api" -type f | head -n 1) && \
+    # 查找并移动二进制文件
+    BINARY_PATH=$(find /tmp/cliproxy -name "cli-proxy-api" -type f | head -n 1) && \
     if [ -z "$BINARY_PATH" ]; then echo "Binary not found after extraction"; exit 1; fi && \
-    mv "$BINARY_PATH" ./cli-proxy-api && \
-    chmod +x ./cli-proxy-api && \
-    # 清理多余文件
-    find . -maxdepth 1 ! -name "cli-proxy-api" ! -name "." ! -name ".." -exec rm -rf {} + && \
+    mv "$BINARY_PATH" /app/cli-proxy-api && \
+    chmod +x /app/cli-proxy-api && \
+    # 清理临时目录
+    rm -rf /tmp/cliproxy && \
     echo "Installation complete."
 
 # 复制启动脚本
