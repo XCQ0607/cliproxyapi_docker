@@ -27,17 +27,23 @@ RUN echo "Detecting architecture..." && \
         *) echo "Unsupported architecture: $ARCH"; exit 1 ;; \
     esac && \
     echo "Fetching latest version tag..." && \
-    # 使用 GitHub 网页重定向获取最新版本号，避开 API 速率限制
-    LATEST_URL=$(curl -Ls -o /dev/null -w %{url_effective} "https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest") && \
+    # 使用 curl -I 获取重定向头 (Location)，这种方式在各种 curl 版本中最稳健
+    # grep -i location: 不区分大小写匹配 Location 头
+    # awk '{print $2}': 打印第二个字段（即 URL）
+    # tr -d '\r': 删除可能存在的 Windows 回车符
+    LATEST_URL=$(curl -Is "https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest" | grep -i "^location:" | awk '{print $2}' | tr -d '\r') && \
+    if [ -z "$LATEST_URL" ]; then \
+        echo "Error: Failed to get redirect URL from GitHub"; \
+        exit 1; \
+    fi && \
+    # 从 URL 中提取版本号 (例如 .../tag/v6.7.15 -> v6.7.15)
     VERSION=$(echo "$LATEST_URL" | grep -o "v[0-9]*\.[0-9]*\.[0-9]*" | head -n 1) && \
     if [ -z "$VERSION" ]; then \
         echo "Error: Failed to extract version from URL: $LATEST_URL"; \
         exit 1; \
     fi && \
     echo "Detected latest version: $VERSION" && \
-    # 构造下载链接 (GitHub Releases 标准格式)
-    # 格式: https://github.com/router-for-me/CLIProxyAPI/releases/download/v6.7.15/CLIProxyAPI_6.7.15_linux_amd64.tar.gz
-    # 注意：文件名中的版本号通常不带 'v' 前缀
+    # 构造下载链接
     CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//') && \
     DOWNLOAD_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}/CLIProxyAPI_${CLEAN_VERSION}_${OS_ARCH}.tar.gz" && \
     echo "Downloading from $DOWNLOAD_URL..." && \
