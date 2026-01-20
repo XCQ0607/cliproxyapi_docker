@@ -14,11 +14,12 @@ RUN apt-get update && apt-get install -y \
 # 设置工作目录
 WORKDIR /app
 
-# 构建参数 (可以用来指定版本，默认 latest)
+# 构建参数
 ARG REPO_OWNER="router-for-me"
 ARG REPO_NAME="CLIProxyAPI"
+ARG GITHUB_TOKEN
 
-# 下载并安装 CLIProxyAPI (逻辑复刻自 1.sh)
+# 下载并安装 CLIProxyAPI
 RUN echo "Detecting architecture..." && \
     ARCH=$(uname -m) && \
     case "$ARCH" in \
@@ -28,17 +29,25 @@ RUN echo "Detecting architecture..." && \
     esac && \
     echo "Fetching latest release for $OS_ARCH..." && \
     API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest" && \
-    RELEASE_INFO=$(curl -s "$API_URL") && \
-    # 提取下载链接
-    DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep -o "\"browser_download_url\": *\"[^\"]*CLIProxyAPI_[^\"]*_${OS_ARCH}.tar.gz\"" | cut -d'"' -f4) && \
-    if [ -z "$DOWNLOAD_URL" ]; then echo "Failed to find download URL"; exit 1; fi && \
+    if [ -n "$GITHUB_TOKEN" ]; then \
+        AUTH_HEADER="Authorization: token $GITHUB_TOKEN"; \
+    else \
+        AUTH_HEADER="User-Agent: Docker-Build"; \
+    fi && \
+    RELEASE_INFO=$(curl -s -H "$AUTH_HEADER" "$API_URL") && \
+    # 尝试提取下载链接
+    DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep -o "\"browser_download_url\": *\"[^\"]*CLIProxyAPI_[^\"]*_${OS_ARCH}.tar.gz\"" | head -n 1 | cut -d'"' -f4) && \
+    if [ -z "$DOWNLOAD_URL" ]; then \
+        echo "Error: Failed to find download URL for $OS_ARCH"; \
+        echo "API Response snippet: $(echo "$RELEASE_INFO" | head -c 200)..."; \
+        exit 1; \
+    fi && \
     echo "Downloading from $DOWNLOAD_URL..." && \
     curl -L -o cliproxy.tar.gz "$DOWNLOAD_URL" && \
     # 解压
     tar -xzf cliproxy.tar.gz && \
     rm cliproxy.tar.gz && \
-    # 整理文件结构：将解压出的版本文件夹内的内容移动到 /app 根目录
-    # 注意：解压后通常会有一个版本号文件夹，我们需要找到二进制文件并移动
+    # 整理文件结构
     BINARY_PATH=$(find . -name "cli-proxy-api" -type f | head -n 1) && \
     if [ -z "$BINARY_PATH" ]; then echo "Binary not found after extraction"; exit 1; fi && \
     mv "$BINARY_PATH" ./cli-proxy-api && \
