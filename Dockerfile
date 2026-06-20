@@ -17,6 +17,7 @@ WORKDIR /app
 # 构建参数
 ARG REPO_OWNER="router-for-me"
 ARG REPO_NAME="CLIProxyAPI"
+ARG VERSION=""
 
 # 下载并安装 CLIProxyAPI
 RUN echo "Detecting architecture..." && \
@@ -26,23 +27,20 @@ RUN echo "Detecting architecture..." && \
         arm64|aarch64) OS_ARCH="linux_arm64" ;; \
         *) echo "Unsupported architecture: $ARCH"; exit 1 ;; \
     esac && \
-    echo "Fetching latest version tag..." && \
-    # 使用 curl -I 获取重定向头 (Location)，这种方式在各种 curl 版本中最稳健
-    # grep -i location: 不区分大小写匹配 Location 头
-    # awk '{print $2}': 打印第二个字段（即 URL）
-    # tr -d '\r': 删除可能存在的 Windows 回车符
-    LATEST_URL=$(curl -Is "https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest" | grep -i "^location:" | awk '{print $2}' | tr -d '\r') && \
-    if [ -z "$LATEST_URL" ]; then \
-        echo "Error: Failed to get redirect URL from GitHub"; \
-        exit 1; \
-    fi && \
-    # 从 URL 中提取版本号 (例如 .../tag/v6.7.15 -> v6.7.15)
-    VERSION=$(echo "$LATEST_URL" | grep -o "v[0-9]*\.[0-9]*\.[0-9]*" | head -n 1) && \
     if [ -z "$VERSION" ]; then \
-        echo "Error: Failed to extract version from URL: $LATEST_URL"; \
-        exit 1; \
+        echo "Fetching latest version tag..." && \
+        LATEST_URL=$(curl -Is "https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest" | grep -i "^location:" | awk '{print $2}' | tr -d '\r') && \
+        if [ -z "$LATEST_URL" ]; then \
+            echo "Error: Failed to get redirect URL from GitHub"; \
+            exit 1; \
+        fi && \
+        VERSION=$(echo "$LATEST_URL" | grep -o "v[0-9]*\.[0-9]*\.[0-9]*" | head -n 1) && \
+        if [ -z "$VERSION" ]; then \
+            echo "Error: Failed to extract version from URL: $LATEST_URL"; \
+            exit 1; \
+        fi; \
     fi && \
-    echo "Detected latest version: $VERSION" && \
+    echo "Using version: $VERSION" && \
     # 构造下载链接
     CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//') && \
     DOWNLOAD_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}/CLIProxyAPI_${CLEAN_VERSION}_${OS_ARCH}.tar.gz" && \

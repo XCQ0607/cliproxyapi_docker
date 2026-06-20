@@ -46,6 +46,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Get the latest CLIProxyAPI version tag via GitHub CLI to avoid rate limits
+      - name: Get latest CLIProxyAPI version
+        id: get-version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(gh release view --repo router-for-me/CLIProxyAPI --json tagName --jq .tagName | tr -d '\r' | tr -d '\n' | xargs)
+          CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "clean_version=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION (clean: $CLEAN_VERSION)"
+
       # Extract metadata (tags, labels) for Docker
       - name: Extract Docker metadata
         id: meta
@@ -54,6 +66,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.get-version.outputs.version }},enable=${{ steps.get-version.outputs.version != '' }}
+            type=raw,value=${{ steps.get-version.outputs.clean_version }},enable=${{ steps.get-version.outputs.clean_version != '' }}
             type=ref,event=branch
             type=ref,event=tag
             type=sha,format=long
@@ -68,5 +82,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.get-version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
