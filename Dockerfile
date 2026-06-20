@@ -1,63 +1,19 @@
 FROM debian:bullseye-slim
 
-# 安装必要依赖
-# curl/wget: 下载文件
-# ca-certificates: HTTPS 支持
-# tar: 解压
+# 安装运行时需要的必要依赖
 RUN apt-get update && apt-get install -y \
-    curl \
-    wget \
     ca-certificates \
-    tar \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
 WORKDIR /app
 
-# 构建参数
-ARG REPO_OWNER="router-for-me"
-ARG REPO_NAME="CLIProxyAPI"
-ARG VERSION=""
+# 声明 TARGETARCH 构建参数，Buildx 会自动传入 (amd64, arm64)
+ARG TARGETARCH
 
-# 下载并安装 CLIProxyAPI
-RUN echo "Detecting architecture..." && \
-    ARCH=$(uname -m) && \
-    case "$ARCH" in \
-        x86_64|amd64) OS_ARCH="linux_amd64" ;; \
-        arm64|aarch64) OS_ARCH="linux_arm64" ;; \
-        *) echo "Unsupported architecture: $ARCH"; exit 1 ;; \
-    esac && \
-    if [ -z "$VERSION" ]; then \
-        echo "Fetching latest version tag..." && \
-        LATEST_URL=$(curl -Is "https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest" | grep -i "^location:" | awk '{print $2}' | tr -d '\r') && \
-        if [ -z "$LATEST_URL" ]; then \
-            echo "Error: Failed to get redirect URL from GitHub"; \
-            exit 1; \
-        fi && \
-        VERSION=$(echo "$LATEST_URL" | grep -o "v[0-9]*\.[0-9]*\.[0-9]*" | head -n 1) && \
-        if [ -z "$VERSION" ]; then \
-            echo "Error: Failed to extract version from URL: $LATEST_URL"; \
-            exit 1; \
-        fi; \
-    fi && \
-    echo "Using version: $VERSION" && \
-    # 构造下载链接
-    CLEAN_VERSION=$(echo "$VERSION" | sed 's/^v//') && \
-    DOWNLOAD_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}/CLIProxyAPI_${CLEAN_VERSION}_${OS_ARCH}.tar.gz" && \
-    echo "Downloading from $DOWNLOAD_URL..." && \
-    curl -L -o cliproxy.tar.gz "$DOWNLOAD_URL" && \
-    # 解压到临时目录
-    mkdir -p /tmp/cliproxy && \
-    tar -xzf cliproxy.tar.gz -C /tmp/cliproxy && \
-    rm cliproxy.tar.gz && \
-    # 查找并移动二进制文件
-    BINARY_PATH=$(find /tmp/cliproxy -name "cli-proxy-api" -type f | head -n 1) && \
-    if [ -z "$BINARY_PATH" ]; then echo "Binary not found after extraction"; exit 1; fi && \
-    mv "$BINARY_PATH" /app/cli-proxy-api && \
-    chmod +x /app/cli-proxy-api && \
-    # 清理临时目录
-    rm -rf /tmp/cliproxy && \
-    echo "Installation complete."
+# 复制对应架构的二进制文件到镜像中
+COPY bin/${TARGETARCH}/cli-proxy-api /app/cli-proxy-api
+RUN chmod +x /app/cli-proxy-api
 
 # 复制启动脚本
 COPY docker-entrypoint.sh /usr/local/bin/
